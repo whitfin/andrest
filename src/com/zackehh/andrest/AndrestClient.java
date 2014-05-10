@@ -5,19 +5,23 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.params.CookiePolicy;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,6 +42,9 @@ import org.json.JSONObject;
  */
 public class AndrestClient {
 
+	// The client to use for requests
+	DefaultHttpClient client = new DefaultHttpClient();
+	
 	/**
 	 * Main controller for the client, has the ability to create any of the other methods. Call with 
 	 * your connection type and data, and everything is handled for you.
@@ -48,13 +55,13 @@ public class AndrestClient {
 	 * @return 	JSON		the JSONObject returned from the request
 	 */
 	public JSONObject request(String url, String method, Map<String, Object> data) throws RESTException {
-		if (method == "GET") {
+		if (method.matches("GET")) {
 			return get(url);
-		} else if (method == "POST") {
+		} else if (method.matches("POST")) {
 			return post(url, data);
-		} else if (method == "PUT") {
+		} else if (method.matches("PUT")) {
 			return put(url, data);
-		} else if (method == "DELETE") {
+		} else if (method.matches("DELETE")) {
 			return delete(url);
 		}
 		throw new RESTException("Error! Incorrect method provided: " + method);
@@ -69,16 +76,12 @@ public class AndrestClient {
 	 */
 	public JSONObject get(String url) throws RESTException {
 		HttpGet request = new HttpGet(url);
-		int statusCode = 0;
 		try {
-			HttpClient client = new DefaultHttpClient();
 			HttpResponse response = client.execute(request);
-
-			statusCode = response.getStatusLine().getStatusCode();
+			int statusCode = response.getStatusLine().getStatusCode();
 			if(statusCode != 200){
 				throw new Exception("Error executing GET request! Received error code: " + response.getStatusLine().getStatusCode());
 			}
-			
 			return new JSONObject(readInput(response.getEntity().getContent()));
 		} catch (Exception e) {
 			throw new RESTException(e.getMessage());
@@ -94,16 +97,12 @@ public class AndrestClient {
 	 */
 	public JSONObject post(String url, Map<String, Object> data) throws RESTException {
 		HttpPost request = new HttpPost(url);
-		int statusCode = 0;
-		
 		List<NameValuePair> nameValuePairs = setParams(data);
-		
 		try {
-			HttpClient client = new DefaultHttpClient();
 			request.setEntity(new UrlEncodedFormEntity(nameValuePairs));
 			HttpResponse response = client.execute(request);
 
-			statusCode = response.getStatusLine().getStatusCode();
+			int statusCode = response.getStatusLine().getStatusCode();
 			if(statusCode != 200){
 				throw new Exception("Error executing POST request! Received error code: " + response.getStatusLine().getStatusCode());
 			}
@@ -123,16 +122,12 @@ public class AndrestClient {
 	 */
 	public JSONObject put(String url, Map<String, Object> data) throws RESTException {
 		HttpPut request = new HttpPut(url);
-		int statusCode = 0;
-		
 		List<NameValuePair> nameValuePairs = setParams(data);
-		
 		try {
-			HttpClient client = new DefaultHttpClient();
 			request.setEntity(new UrlEncodedFormEntity(nameValuePairs));
 			HttpResponse response = client.execute(request);
 
-			statusCode = response.getStatusLine().getStatusCode();
+			int statusCode = response.getStatusLine().getStatusCode();
 			if(statusCode != 200){
 				throw new Exception("Error executing PUT request! Received error code: " + response.getStatusLine().getStatusCode());
 			}
@@ -151,12 +146,10 @@ public class AndrestClient {
 	 */
 	public JSONObject delete(String url) throws RESTException {
 		HttpDelete request = new HttpDelete(url);
-		int statusCode = 0;
 		try {
-			HttpClient client = new DefaultHttpClient();
 			HttpResponse response = client.execute(request);
 
-			statusCode = response.getStatusLine().getStatusCode();
+			int statusCode = response.getStatusLine().getStatusCode();
 			if(statusCode != 200){
 				throw new Exception("Error executing DELETE request! Received error code: " + response.getStatusLine().getStatusCode());
 			}
@@ -165,6 +158,38 @@ public class AndrestClient {
 		} catch (Exception e) {
 			throw new RESTException(e.getMessage());
 		}
+	}
+	
+	/**
+	 * Adds a set of cookies to the HTTPClient. Pass in a HashMap of <String, Object>
+	 * to add the cookie values to the client. These cookies persist until removed.
+	 * 
+	 * @param cookies		a HashMap of cookies
+	 * @param url			the domain URL of the cookie
+	 */
+	public void setCookies(HashMap<String, String> cookies, String url){
+		if(cookies == null){
+			return;
+		}
+
+		// Set cookies
+		client.getParams().setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.BROWSER_COMPATIBILITY);
+		
+		// Create cookie store
+		BasicCookieStore store = (BasicCookieStore) (client.getCookieStore() == null ? new BasicCookieStore() : client.getCookieStore());
+
+		// Add cookies to request
+		for(Map.Entry<String, String> entry : cookies.entrySet()) {
+			BasicClientCookie cookie = new BasicClientCookie(entry.getKey(), entry.getValue());
+			if(url != null){
+				cookie.setDomain(url);
+			}
+			cookie.setPath("/");
+			store.addCookie(cookie);
+		}
+
+		// Add the cookie
+		client.setCookieStore(store);
 	}
 	
 	/**
